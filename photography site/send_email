@@ -1,0 +1,28 @@
+<?php
+// Assuming you have a database connection established
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $email = 'admin@example.com'; // Replace with admin's email
+
+    // Generate a unique token (e.g., using random_bytes and bin2hex)
+    $token = bin2hex(random_bytes(32));
+
+    // Store token in database or temporary storage
+    // Example: Using a temporary array (replace with database storage in production)
+    session_start();
+    $_SESSION['reset_token'] = $token;
+
+    // Send reset password email
+    $to = $email;
+    $subject = 'Reset Your Admin Password';
+    $message = 'Click the link below to reset your password: ' . PHP_EOL;
+    $message .= 'http://example.com/reset_password.php?token=' . urlencode($token);
+    $headers = 'From: admin@example.com';
+
+    if (mail($to, $subject, $message, $headers)) {
+        echo json_encode(array('status' => 'success', 'message' => 'Reset password link sent to your email.'));
+    } else {
+        echo json_encode(array('status' => 'error', 'message' => 'Failed to send reset password email.'));
+    }
+}
+?>

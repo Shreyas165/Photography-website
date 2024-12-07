@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Portraits</title>
+    <style>
+        body {
+            background-color: black;
+            color: #ccc;
+        }
+        .upload-box {
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 300px;
+            height: 200px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            color: #ccc;
+            cursor: pointer;
+            margin: 20px auto;
+            position: relative;
+        }
+        .upload-box input[type="file"] {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+        .image-gallery {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        .image-gallery img {
+            margin: 10px;
+            max-width: 150px;
+            border-radius: 10px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+            cursor: pointer; 
+        }
+        .image-gallery .image-container {
+            position: relative;
+            display: inline-block;
+        }
+        .image-gallery .delete-button {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: red;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            padding-top: 60px;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.9);
+        }
+
+        .modal-content {
+            margin: auto;
+            display: block;
+            width: 80%;
+            max-width: 700px;
+        }
+
+        .modal-content, .close {
+            animation-name: zoom;
+            animation-duration: 0.6s;
+        }
+
+        @keyframes zoom {
+            from {transform:scale(0)}
+            to {transform:scale(1)}
+        }
+
+        .close {
+            position: absolute;
+            top: 15px;
+            right: 35px;
+            color: #f1f1f1;
+            font-size: 40px;
+            font-weight: bold;
+            transition: 0.3s;
+            cursor: pointer; 
+        }
+
+        .close:hover,
+        .close:focus {
+            color: #bbb;
+            text-decoration: none;
+        }
+
+        .admin-form {
+            display: none;
+            position: fixed;
+            z-index: 2;
+            background-color: rgba(0, 0, 0, 0.9);
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .admin-form-content {
+            background-color: #333;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .admin-form input[type="password"], .admin-form button {
+            margin: 10px;
+            padding: 8px 16px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            background-color: #ccc;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="uploadContainer"></div>
+    <div class="image-gallery" id="imageGallery"></div>
+
+    <div id="imageModal" class="modal">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <img class="modal-content" id="modalImage">
+    </div>
+
+    <!-- Admin password change form -->
+    <div id="adminPasswordForm" class="admin-form">
+        <div class="admin-form-content">
+            <h2>Change Admin Password</h2>
+            <input type="password" id="adminPasswordInput" placeholder="Enter New Password" required><br>
+        <button onclick="setAdminPassword()">Set Password</button>
+        </div>
+    </div>
+
+    <script>
+        var isAdmin = false;
+        var adminPassword = localStorage.getItem('adminPassword') || '';
+
+        function initializeAdminPassword() {
+            if (!localStorage.getItem('adminPassword')) {
+                toggleAdminForm();
+            } else {
+                adminPassword = localStorage.getItem('adminPassword');
+            }
+        }
+
+        function setAdminPassword() {
+            const newPassword = document.getElementById('adminPasswordInput').value;
+            if (newPassword) {
+                adminPassword = newPassword;
+                localStorage.setItem('adminPassword', newPassword);
+                alert('Password set successfully!');
+                toggleAdminForm();
+            } else {
+                alert('Please enter a valid password.');
+            }
+        }
+
+        document.addEventListener('mousemove', (event) => {
+            if (event.clientY >= window.innerHeight - 50 && event.clientX <= 50) {
+                if (!isAdmin) {
+                    const password = prompt('Enter admin password to upload images:');
+                    if (password === adminPassword) {
+                        isAdmin = true;
+                        addNewUploadBox();
+                        addDeleteButtons();
+                    } else if (password.toLowerCase() === 'forgot password') {
+                        const adminName = prompt('Enter mansion name to reset password:');
+                        if (adminName && adminName.toLowerCase() === 'bhoomi mansion') {
+                            toggleAdminForm();
+                        } else {
+                            alert('Invalid admin name.');
+                        }
+                    } else {
+                        alert('You Are Not The Admin');
+                    }
+                }
+            }
+        });
+
+        function updateAdminPassword(newPassword) {
+            fetch('update_password.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: new URLSearchParams({ newPassword: newPassword })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    console.log('Password updated successfully.');
+                } else {
+                    console.error('Password update failed:', data.message);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        document.getElementById('uploadContainer').addEventListener('change', function(event) {
+            const fileInput = event.target;
+            if (fileInput.classList.contains('fileInput')) {
+                const file = fileInput.files[0];
+                if (file) {
+                    const formData = new FormData();
+                    formData.append('image', file);
+
+                    console.log('Uploading file:', file);
+
+                    fetch('upload.php', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            console.log('File uploaded successfully:', data.filepath);
+                            displayImage(data.filepath, data.filename);
+                        } else {
+                            console.error('Upload failed:', data.message);
+                        }
+                    })
+                    .catch((error) => {
+                        console.error('Error during file upload:', error);
+                    });
+                }
+            }
+        });
+
+        function displayImage(filepath, filename) {
+            const imageGallery = document.getElementById('imageGallery');
+            const imageContainer = document.createElement('div');
+            imageContainer.className = 'image-container';
+            imageContainer.dataset.filename = filename;
+            const img = document.createElement('img');
+            img.src = filepath;
+            img.onclick = () => openModal(filepath);
+            imageContainer.appendChild(img);
+
+            if (isAdmin) {
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'delete-button';
+                deleteButton.innerText = 'Delete';
+                deleteButton.onclick = () => deleteImage(filename, imageContainer);
+                imageContainer.appendChild(deleteButton);
+            }
+
+            imageGallery.appendChild(imageContainer);
+        }
+
+        function addNewUploadBox() {
+            const uploadContainer = document.getElementById('uploadContainer');
+            const newUploadBox = document.createElement('div');
+            newUploadBox.className = 'upload-box';
+            newUploadBox.innerHTML = '+ Add Image <input type="file" class="fileInput" accept="image/*">';
+            uploadContainer.appendChild(newUploadBox);
+        }
+
+        function fetchImages() {
+            fetch('images.php')
+                .then(response => response.json())
+                .then(data => {
+                    data.forEach(image => {
+                        displayImage(image.filepath, image.filename);
+                    });
+                    if (isAdmin) {
+                        addDeleteButtons();
+                    }
+                })
+                .catch(error => console.error('Error fetching images:', error));
+        }
+
+        function deleteImage(filename, imageContainer) {
+            console.log('Filename received:', filename);
+            fetch('delete.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: new URLSearchParams({ filename })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    console.log('File deleted:', filename);
+                    imageContainer.remove();
+                } else {
+                    console.error('Error deleting image:', data.message);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        function openModal(src) {
+            const modal = document.getElementById("imageModal");
+            const modalImg = document.getElementById("modalImage");
+            modal.style.display = "block";
+            modalImg.src = src;
+        }
+
+        function closeModal() {
+            const modal = document.getElementById("imageModal");
+            modal.style.display = "none";
+        }
+
+        function toggleAdminForm() {
+            const form = document.getElementById('adminPasswordForm');
+            form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+        }
+
+        window.onload = function() {
+            initializeAdminPassword();
+            fetchImages();
+        };
+
+        
+        function addDeleteButtons() {
+            const imageContainers = document.querySelectorAll('.image-container');
+            imageContainers.forEach(container => {
+                if (!container.querySelector('.delete-button')) {
+                    const filename = container.dataset.filename;
+                    const deleteButton = document.createElement('button');
+                    deleteButton.className = 'delete-button';
+                    deleteButton.innerText = 'Delete';
+                    deleteButton.onclick = () => deleteImage(filename, container);
+                    container.appendChild(deleteButton);
+                }
+            });
+        }
+    </script>
+    <a href="Home.html" style="color: aqua;"> << </a>
+</body>
+</html>
